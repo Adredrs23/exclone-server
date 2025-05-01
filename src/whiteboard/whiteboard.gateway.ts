@@ -10,6 +10,12 @@ import {
 import { Server, Socket } from 'socket.io';
 import { EventLogService } from '../event-log/event-log.service';
 
+type WhiteboardObject = {
+  id: string;
+  props: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
 @WebSocketGateway({ cors: true }) // enables CORS for dev
 export class WhiteboardGateway
   implements OnGatewayConnection, OnGatewayDisconnect
@@ -19,34 +25,36 @@ export class WhiteboardGateway
 
   constructor(private readonly eventLogService: EventLogService) {}
 
-  private objects: Record<string, any> = {}; // In-memory store
+  private objects: Record<string, WhiteboardObject> = {}; // In-memory store
 
   handleConnection(client: Socket) {
-    // this.eventLogService.log('client:connected', { clientId: client.id });
-    // this.eventLogService.log('client:syncing', {
-    //   objects: Object.values(this.objects),
-    // });
+    this.eventLogService.log('client:connected', { clientId: client.id });
+    this.eventLogService.log('client:syncing', {
+      objects: Object.values(this.objects),
+    });
     console.log('client:connected and syncing', { clientId: client.id });
     client.emit('object:sync', { objects: Object.values(this.objects) });
   }
 
   handleDisconnect(client: Socket) {
     this.eventLogService.log('client:disconnected', { clientId: client.id });
+    console.log('client:disconnected', { clientId: client.id });
   }
 
   @SubscribeMessage('object:added')
   handleObjectAdded(
-    @MessageBody() data: any,
+    @MessageBody() data: WhiteboardObject,
     @ConnectedSocket() client: Socket,
   ) {
     this.eventLogService.log('object:added', data);
     this.objects[data.id] = data;
+
     client.broadcast.emit('object:added', data);
   }
 
   @SubscribeMessage('object:modified')
   handleObjectModified(
-    @MessageBody() data: any,
+    @MessageBody() data: WhiteboardObject,
     @ConnectedSocket() client: Socket,
   ) {
     this.eventLogService.log('object:modified', data);
@@ -64,7 +72,7 @@ export class WhiteboardGateway
 
   @SubscribeMessage('object:removed')
   handleObjectRemoved(
-    @MessageBody() data: any,
+    @MessageBody() data: WhiteboardObject,
     @ConnectedSocket() client: Socket,
   ) {
     this.eventLogService.log('object:removed', data);
